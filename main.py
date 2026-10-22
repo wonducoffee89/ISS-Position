@@ -3,7 +3,6 @@ import requests
 import streamlit as st
 import pandas as pd
 import pydeck as pdk
-from streamlit_autorefresh import st_autorefresh
 
 # 페이지 설정
 st.set_page_config(
@@ -11,9 +10,6 @@ st.set_page_config(
     page_icon="🛰️",
     layout="centered"
 )
-
-# 5초마다 페이지 자동 갱신 (5000밀리초)
-count = st_autorefresh(interval=5000, limit=None, key="iss_refresh")
 
 # 상단 태그 및 제목
 st.markdown(
@@ -27,7 +23,7 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# 설명 박스 (이미지 내용 반영)
+# 설명 박스
 st.markdown(
     """
     <div style="background-color: #fdfefe; border: 1px solid #f0e6d2; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
@@ -41,7 +37,6 @@ st.markdown(
 )
 
 # Where the ISS at? API 호출 함수
-@st.cache_data(ttl=3)
 def get_iss_data():
     url = "https://api.wheretheiss.at/v1/satellites/25544"
     try:
@@ -52,58 +47,63 @@ def get_iss_data():
         return None
     return None
 
-data = get_iss_data()
+# 5초마다 자동 갱신되는 영역 (Streamlit 최신 버전 기능 활용)
+@st.fragment(run_every=5)
+def render_iss_tracker():
+    data = get_iss_data()
 
-if data:
-    lat = data.get("latitude")
-    lon = data.get("longitude")
-    alt = data.get("altitude") # km
-    vel = data.get("velocity") # km/h
-    
-    # 실시간 메트릭 정보 표시
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("위도 (Latitude)", f"{lat:.2f}°")
-    col2.metric("경도 (Longitude)", f"{lon:.2f}°")
-    col3.metric("고도 (Altitude)", f"{alt:.2f} km")
-    col4.metric("속도 (Velocity)", f"{vel:,.0f} km/h")
+    if data:
+        lat = data.get("latitude")
+        lon = data.get("longitude")
+        alt = data.get("altitude") # km
+        vel = data.get("velocity") # km/h
+        
+        # 실시간 메트릭 정보 표시
+        col1, col2, col3, col4 = st.columns(4)
+        col1.metric("위도 (Latitude)", f"{lat:.2f}°")
+        col2.metric("경도 (Longitude)", f"{lon:.2f}°")
+        col3.metric("고도 (Altitude)", f"{alt:.2f} km")
+        col4.metric("속도 (Velocity)", f"{vel:,.0f} km/h")
 
-    st.markdown("---")
+        st.markdown("---")
 
-    # pydeck을 활용한 실시간 위치 지도 시각화
-    st.subheader("🌍 ISS 실시간 위치 지도")
-    
-    df = pd.DataFrame({
-        'lat': [lat],
-        'lon': [lon],
-        'name': ['ISS (International Space Station)']
-    })
+        # pydeck을 활용한 실시간 위치 지도 시각화
+        st.subheader("🌍 ISS 실시간 위치 지도")
+        
+        df = pd.DataFrame({
+            'lat': [lat],
+            'lon': [lon],
+            'name': ['ISS (International Space Station)']
+        })
 
-    layer = pdk.Layer(
-        "ScatterplotLayer",
-        data=df,
-        get_position=["lon", "lat"],
-        get_color=[255, 75, 75, 200],
-        get_radius=300000, # 가시성을 위한 마커 반경 설정
-        pickable=True,
-    )
+        layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=df,
+            get_position=["lon", "lat"],
+            get_color=[255, 75, 75, 200],
+            get_radius=300000, 
+            pickable=True,
+        )
 
-    view_state = pdk.ViewState(
-        latitude=lat,
-        longitude=lon,
-        zoom=2,
-        pitch=0,
-    )
+        view_state = pdk.ViewState(
+            latitude=lat,
+            longitude=lon,
+            zoom=2,
+            pitch=0,
+        )
 
-    r = pdk.Deck(
-        layers=[layer],
-        initial_view_state=view_state,
-        tooltip={"text": "{name}\n위도: {lat}\n경도: {lon}"}
-    )
+        r = pdk.Deck(
+            layers=[layer],
+            initial_view_state=view_state,
+            tooltip={"text": "{name}\n위도: {lat}\n경도: {lon}"}
+        )
 
-    st.pydeck_chart(r)
+        st.pydeck_chart(r)
+    else:
+        st.error("ISS 데이터를 불러오는 데 실패했습니다. 잠시 후 다시 시도해 주세요.")
 
-else:
-    st.error("ISS 데이터를 불러오는 데 실패했습니다. 잠시 후 다시 시도해 주세요.")
+# 자동 갱신 컴포넌트 실행
+render_iss_tracker()
 
 # 하단 정보 및 링크 영역
 st.markdown("---")
